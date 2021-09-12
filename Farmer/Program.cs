@@ -164,8 +164,13 @@ namespace Farmer
         public void PressEsc()
         {
             User32.SetForegroundWindow(window_handle);
+            
+            // there seems to be some interference
+            Thread.Sleep(5);
+            User32.PostMessage(window_handle, User32.WM_KEYUP, User32.VK_CONTROL, 15);
+            Thread.Sleep(5);
+
             User32.PostMessage(window_handle, User32.WM_KEYDOWN, User32.VK_ESCAPE, 0);
-            User32.PostMessage(window_handle, User32.WM_KEYUP, User32.VK_ESCAPE, 0);
             Thread.Sleep(5);
         }
 
@@ -317,6 +322,11 @@ namespace Farmer
             return FindTemplate(bmp, chest2_template, 0.9);
         }
 
+        public XY? FindDeadBody(Bitmap bmp)
+        {
+            return FindTemplate(bmp, dead_body_template, 0.9);
+        }
+
         private static Mat LoadBitmap(string path)
         {
             var bmp = new Bitmap(path);
@@ -342,6 +352,37 @@ namespace Farmer
         private Mat rune_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\rune.png");
         private Mat chest_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\chest.png");
         private Mat chest2_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\chest2.png");
+        private Mat dead_body_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\dead_body.png");
+    }
+
+    public  class RandomWalk
+    {
+        private int line = 0;
+        private int step = 0;
+        public XY Next()
+        {
+            var ret = blink_points[line % blink_points.Count];
+
+            step++;
+            if (step > line)
+            {
+                step = 0;
+                line++;
+            }
+
+            return ret;
+        }
+
+        //private const int min_x = 5;
+        //private const int max_x = 780;
+        //private const int min_y = 30;
+        //private const int max_y = 550;
+        // less so it's searching more
+        private const int min_x = 100;
+        private const int max_x = 680;
+        private const int min_y = 130;
+        private const int max_y = 450;
+        private List<XY> blink_points = new List<XY> { new XY(min_x, min_y), new XY(max_x, min_y), new XY(max_x, max_y), new XY(min_x, max_y) };
     }
 
     class Program
@@ -353,6 +394,7 @@ namespace Farmer
             //TODO: add location detection foo returning enum
             using var text_detector = new TextDetector();
             var template_detector = new TemplateDetector();
+            var random_walk = new RandomWalk();
 
             diablo.DumpBitmap().Save(@"C:/tmp/tmp.png");
 
@@ -385,25 +427,102 @@ namespace Farmer
             //}
 
             // Demo 3: random walk
+            //diablo.CastBuffs();
+
+            //int min_x = 5;
+            //int max_x = 780;
+
+            //int min_y = 30;
+            //int max_y = 550;
+            //var blink_points = new List<XY> { new XY(min_x, min_y), new XY(max_x, min_y), new XY(max_x, max_y), new XY(min_x, max_y) };
+            //for (int line = 0; line < 7; line++)
+            //{
+            //    for (int step = 0; step <= line; step++)
+            //    {
+            //        var blink_point = blink_points[line % blink_points.Count];
+            //        diablo.Blink(blink_point.x, blink_point.y);
+            //        Thread.Sleep(400);
+            //    }
+            //}
+
+            //// Demo 4: getting to Lower Kurast, random walk + opening chests
+            diablo.LeftClick(400, 333);  // Single Player
+            diablo.DoubleLeftClick(200, 150);  // 1st character
+            //diablo.LeftClick(400, 305);  // Normal difficulty
+            diablo.LeftClick(400, 390);  // Hell difficulty
+            Thread.Sleep(1500);
+
+            // TODO: REMEMBER TO BUY KEYS!
+            // TODO: add using orb
+            //// Pick up dead body
+            // TODO: fix it breaking the run if the body is not there
+            // TODO: use template
+            if (template_detector.FindDeadBody(diablo.DumpBitmap()) != null)
+            {
+                diablo.Click(400, 300);
+                Thread.Sleep(500);
+            }
+
             diablo.CastBuffs();
 
-            int min_x = 5;
-            int max_x = 780;
+            // Go from Kurast Docks to Lower Kurast 
+            diablo.Click(750, 350);
+            Thread.Sleep(1500);
+            diablo.Click(750, 150);
+            Thread.Sleep(1500);
+            diablo.Click(750, 150);
+            Thread.Sleep(1500);
+            diablo.Click(750, 150);
+            Thread.Sleep(1500);
+            diablo.Click(750, 336);
+            Thread.Sleep(1500);
+            diablo.Click(750, 150);
+            Thread.Sleep(1500);
+            diablo.Click(750, 150);
+            Thread.Sleep(1500);
+            diablo.Click(550, 400);
+            Thread.Sleep(1500);
+            diablo.Click(175, 300);
+            Thread.Sleep(100);
 
-            int min_y = 30;
-            int max_y = 550;
-            var blink_points = new List<XY> { new XY(min_x, min_y), new XY(max_x, min_y), new XY(max_x, max_y), new XY(min_x, max_y) };
-            for (int line = 0; line < 7; line++)
+            for (int i = 0; i < 50; i++)
             {
-                for (int step = 0; step <= line; step++)
+                var blink_point = random_walk.Next();
+                diablo.Blink(blink_point.x, blink_point.y);
+                Thread.Sleep(400);
+
+                for (int chest_try = 0; chest_try < 2; chest_try++)  // there may be 2 chests next to each other
                 {
-                    var blink_point = blink_points[line % blink_points.Count];
-                    diablo.Blink(blink_point.x, blink_point.y);
-                    Thread.Sleep(400);
+                    XY? chest = template_detector.FindChest(diablo.DumpBitmap());
+                    if (chest == null)
+                        break;
+
+                    Console.WriteLine("Found chest");
+                    diablo.Click(chest.Value.x, chest.Value.y);
+
+                    Thread.Sleep(1500);
+
+                    for (int rune_try = 0; rune_try < 3; rune_try++)  // rune picking fails sometimes
+                    {
+                        XY? rune = diablo.DetectRunes(template_detector);
+                        if (rune == null)
+                            break;
+
+                        Console.WriteLine("Found rune");
+                        diablo.PickUpItem(rune.Value.x, rune.Value.y);
+
+                        Thread.Sleep(1500);
+                    }
                 }
             }
 
-            // TODO: cast buffs
+            Console.WriteLine("Ending the run");
+            Thread.Sleep(400);
+            diablo.PressEsc();
+            Thread.Sleep(100);
+            diablo.LeftClick(390, 290);
+            Thread.Sleep(1000);
+
             // TODO: check other template matching methods (for performance)
 
             // TODO: add turning on map after starting the game
