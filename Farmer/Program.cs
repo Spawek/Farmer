@@ -154,7 +154,7 @@ namespace Farmer
             User32.PostMessage(window_handle, User32.WM_KEYUP, User32.VK_CONTROL, 0);
         }
 
-        public XY? DetectRunes(RuneDetector rune_detector)
+        public XY? DetectRunes(TemplateDetector rune_detector)
         {
             ShowItems();
             var bmp = DumpBitmap();
@@ -262,106 +262,47 @@ namespace Farmer
         }
     }
 
-    public class RuneDetector
+    public class TemplateDetector
     {
-        public RuneDetector()
-        {
-            {
-                var tmpl_bmp2 = new Bitmap(@"C:\maciek\programowanie\Farmer\templates\rune.png");
-                var tmpl_bmp = new Bitmap(tmpl_bmp2).Clone(new Rectangle(0, 0, tmpl_bmp2.Width, tmpl_bmp2.Height), PixelFormat.Format32bppRgb);
-                rune_tmpl = OpenCvSharp.Extensions.BitmapConverter.ToMat(tmpl_bmp);
-            }
-        }
-        Mat rune_tmpl;
-
         public XY? FindRune(Bitmap bmp)
         {
-            DateTime before = DateTime.Now;
-            //const int KERNEL_SIZE = 5;
-            //const int MATCHES_THRESHOLD = 10;
-            //var pixel_matches_per_location = new Dictionary<XY, int>();
+            return FindTemplate(bmp, rune_template, 0.9);
+        }
 
-            //Color rune_text_color = Color.FromArgb(208, 132, 32);
-            //for (int x = 0; x < bmp.Width; x++)
-            //{
-            //    for (int y = 0; y < bmp.Height; y++)
-            //    {
-            //        if (bmp.GetPixel(x, y) == rune_text_color)
-            //        {
-            //            int trimmed_x = x - x % KERNEL_SIZE;
-            //            int trimmed_y = y - y % KERNEL_SIZE;
-            //            XY xy = new XY(trimmed_x, trimmed_y);
-            //            if (!pixel_matches_per_location.ContainsKey(xy))
-            //                pixel_matches_per_location.Add(xy, 0);
-            //            pixel_matches_per_location[xy]++;
-            //        }
-            //    }
-            //}
+        public XY? FindChest(Bitmap bmp)
+        {
+            var ret = FindTemplate(bmp, chest_template, 0.9);
+            if (ret != null)
+                return ret;
+
+            return FindTemplate(bmp, chest2_template, 0.9);
+        }
+
+        private static Mat LoadBitmap(string path)
+        {
+            var bmp = new Bitmap(path);
+            var tmp = new Bitmap(bmp).Clone(new Rectangle(0, 0, bmp.Width, bmp.Height), PixelFormat.Format32bppRgb);
+            return OpenCvSharp.Extensions.BitmapConverter.ToMat(tmp);
+        }
+
+        private static XY? FindTemplate(Bitmap bmp, Mat template, double threshold)
+        {
             var image = OpenCvSharp.Extensions.BitmapConverter.ToMat(bmp);
             var result = new Mat();
-
             
-            Cv2.MatchTemplate(image, rune_tmpl, result, TemplateMatchModes.CCoeffNormed);
-            //image.SaveImage(@"C:\tmp\image.png");
-            //result.SaveImage(@"C:\tmp\detect.png");
+            Cv2.MatchTemplate(image, template, result, TemplateMatchModes.CCoeffNormed);
 
             var min_index = new int[2];
             var max_index = new int[2];
             result.MinMaxIdx(out double min, out double max, min_index, max_index);
-            //Console.WriteLine($"rune detection took: {DateTime.Now - before}");
-            if (max > 0.9)
-            {
-                var ret = new XY(max_index[1] + rune_tmpl.Width / 2, max_index[0] + rune_tmpl.Height / 2);
-
-                //Bitmap dbg = (Bitmap)bmp.Clone();
-                //for (int dx = -1; dx <= 1; dx++)
-                //{
-                //    for (int dy = -1; dy <= 1; dy++)
-                //    {
-                //        dbg.SetPixel(ret.x + dx, ret.y + dy, Color.Red);
-                //    }
-                //}
-                //string name = $"img_{DateTime.Now.ToLongTimeString()}_runes".Replace(":", "_").Replace("\n", "");
-                //dbg.Save($@"C:/tmp/{name}.png");
-
-                return ret;
-            }
+            if (max > threshold)
+                return new XY(max_index[1] + template.Width / 2, max_index[0] + template.Height / 2);
             return null;
-
-
-            //var matches = pixel_matches_per_location
-            //    .Where(x => x.Value >= MATCHES_THRESHOLD)
-            //    .Select(x => x.Key)
-            //    .Select(x => new XY { x = x.x + KERNEL_SIZE / 2, y = x.y + KERNEL_SIZE / 2 })
-            //    .ToList();
-
-            //if (matches.Count > 0)
-            //{
-            //    Bitmap dbg = (Bitmap)bmp.Clone();
-            //    foreach (var match in matches)
-            //    {
-            //        for (int dx = -1; dx <= 1; dx++)
-            //        {
-            //            for (int dy = -1; dy <= 1; dy++)
-            //            {
-            //                dbg.SetPixel(match.x + dx, match.y + dy, Color.Red);
-            //            }
-            //        }
-            //        string name = $"img_{DateTime.Now.ToLongTimeString()}_runes".Replace(":", "_").Replace("\n", "");
-            //        dbg.Save($@"C:/tmp/{name}.png");
-            //    }
-            //}
-
-
-
-            //if (pixel_matches_per_location.Count == 0)
-            //    return null;
-
-            //var max_match = pixel_matches_per_location.MaxElement(x => x.Value);
-            //if (max_match.Value >= MATCHES_THRESHOLD)
-            //    return max_match.Key;
-            //return null;
         }
+
+        private Mat rune_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\rune.png");
+        private Mat chest_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\chest.png");
+        private Mat chest2_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\chest2.png");
     }
 
     class Program
@@ -372,21 +313,39 @@ namespace Farmer
 
             //TODO: add location detection foo returning enum
             using var text_detector = new TextDetector();
-            var rune_detector = new RuneDetector();
+            var template_detector = new TemplateDetector();
 
-            // Demo 1: picking up runes
+            diablo.DumpBitmap().Save(@"C:/tmp/tmp.png");
+
+            //Demo 1: picking up runes
+            //while (true)
+            //{
+            //    XY? rune = diablo.DetectRunes(rune_detector);
+            //    if (rune != null)
+            //    {
+            //        Console.WriteLine("Found rune");
+            //        diablo.PickUpItem(rune.Value.x, rune.Value.y);
+
+            //        Thread.Sleep(1500);
+            //    }
+            //    Thread.Sleep(100);
+            //}
+
+            // Demo 2: opening chests
             while (true)
             {
-                XY? rune = diablo.DetectRunes(rune_detector);
-                if (rune != null)
+                XY? chest = template_detector.FindChest(diablo.DumpBitmap());
+                if (chest != null)
                 {
-                    Console.WriteLine("Found rune");
-                    diablo.PickUpItem(rune.Value.x, rune.Value.y);
+                    Console.WriteLine("Found chest");
+                    diablo.Click(chest.Value.x, chest.Value.y);
 
-                    Thread.Sleep(1000);
+                    Thread.Sleep(1500);
                 }
                 Thread.Sleep(100);
             }
+
+            // TODO: check other template matching methods
 
             // TODO: add turning on map after starting the game
             //Console.WriteLine($"current location: {diablo.DetectMapLocation(text_detector)}");
@@ -398,7 +357,7 @@ namespace Farmer
             //Console.WriteLine($"Found runes: {found_runes.Count}");
             //Console.WriteLine($"detected items: {text_detector.Detect(bmp)}"); // TODO: can detect items by just spotting the color of the runes
 
-            //// Menu options:
+            // Menu options:
             //diablo.LeftClick(400, 333);  // Single Player
             //diablo.DoubleLeftClick(200, 150);  // 1st character
             //diablo.LeftClick(400, 305);  // Normal difficulty
