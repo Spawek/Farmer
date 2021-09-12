@@ -7,7 +7,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using OpenCvSharp;
-
+using NumSharp;
 using Cv2 = OpenCvSharp.Cv2;
 
 namespace Farmer
@@ -99,8 +99,9 @@ namespace Farmer
         // Mouse must be on the object for some time for the click to work.
         public void PickUpItem(int x, int y)
         {
+            MoveMouse(x, y);
             ShowItems();
-            Click(x, y);
+            LeftClick(x, y);
         }
 
         public void RightClick(int x, int y)
@@ -263,30 +264,70 @@ namespace Farmer
 
     public class RuneDetector
     {
+        public RuneDetector()
+        {
+            {
+                var tmpl_bmp2 = new Bitmap(@"C:\maciek\programowanie\Farmer\templates\rune.png");
+                var tmpl_bmp = new Bitmap(tmpl_bmp2).Clone(new Rectangle(0, 0, tmpl_bmp2.Width, tmpl_bmp2.Height), PixelFormat.Format32bppRgb);
+                rune_tmpl = OpenCvSharp.Extensions.BitmapConverter.ToMat(tmpl_bmp);
+            }
+        }
+        Mat rune_tmpl;
+
         public XY? FindRune(Bitmap bmp)
         {
-            const int KERNEL_SIZE = 5;
-            const int MATCHES_THRESHOLD = 10;
-            var pixel_matches_per_location = new Dictionary<XY, int>();
+            DateTime before = DateTime.Now;
+            //const int KERNEL_SIZE = 5;
+            //const int MATCHES_THRESHOLD = 10;
+            //var pixel_matches_per_location = new Dictionary<XY, int>();
 
-            Color rune_text_color = Color.FromArgb(208, 132, 32);
-            for (int x = 0; x < bmp.Width; x++)
+            //Color rune_text_color = Color.FromArgb(208, 132, 32);
+            //for (int x = 0; x < bmp.Width; x++)
+            //{
+            //    for (int y = 0; y < bmp.Height; y++)
+            //    {
+            //        if (bmp.GetPixel(x, y) == rune_text_color)
+            //        {
+            //            int trimmed_x = x - x % KERNEL_SIZE;
+            //            int trimmed_y = y - y % KERNEL_SIZE;
+            //            XY xy = new XY(trimmed_x, trimmed_y);
+            //            if (!pixel_matches_per_location.ContainsKey(xy))
+            //                pixel_matches_per_location.Add(xy, 0);
+            //            pixel_matches_per_location[xy]++;
+            //        }
+            //    }
+            //}
+            var image = OpenCvSharp.Extensions.BitmapConverter.ToMat(bmp);
+            var result = new Mat();
+
+            
+            Cv2.MatchTemplate(image, rune_tmpl, result, TemplateMatchModes.CCoeffNormed);
+            //image.SaveImage(@"C:\tmp\image.png");
+            //result.SaveImage(@"C:\tmp\detect.png");
+
+            var min_index = new int[2];
+            var max_index = new int[2];
+            result.MinMaxIdx(out double min, out double max, min_index, max_index);
+            //Console.WriteLine($"rune detection took: {DateTime.Now - before}");
+            if (max > 0.9)
             {
-                for (int y = 0; y < bmp.Height; y++)
-                {
-                    if (bmp.GetPixel(x, y) == rune_text_color)
-                    {
-                        int trimmed_x = x - x % KERNEL_SIZE;
-                        int trimmed_y = y - y % KERNEL_SIZE;
-                        XY xy = new XY(trimmed_x, trimmed_y);
-                        if (!pixel_matches_per_location.ContainsKey(xy))
-                            pixel_matches_per_location.Add(xy, 0);
-                        pixel_matches_per_location[xy]++;
-                    }
-                }
-            }
+                var ret = new XY(max_index[1] + rune_tmpl.Width / 2, max_index[0] + rune_tmpl.Height / 2);
 
-            bmp.Save($@"C:/tmp/runedbg.png");
+                //Bitmap dbg = (Bitmap)bmp.Clone();
+                //for (int dx = -1; dx <= 1; dx++)
+                //{
+                //    for (int dy = -1; dy <= 1; dy++)
+                //    {
+                //        dbg.SetPixel(ret.x + dx, ret.y + dy, Color.Red);
+                //    }
+                //}
+                //string name = $"img_{DateTime.Now.ToLongTimeString()}_runes".Replace(":", "_").Replace("\n", "");
+                //dbg.Save($@"C:/tmp/{name}.png");
+
+                return ret;
+            }
+            return null;
+
 
             //var matches = pixel_matches_per_location
             //    .Where(x => x.Value >= MATCHES_THRESHOLD)
@@ -311,13 +352,15 @@ namespace Farmer
             //    }
             //}
 
-            if (pixel_matches_per_location.Count == 0)
-                return null;
 
-            var max_match = pixel_matches_per_location.MaxElement(x => x.Value);
-            if (max_match.Value >= MATCHES_THRESHOLD)
-                return max_match.Key;
-            return null;
+
+            //if (pixel_matches_per_location.Count == 0)
+            //    return null;
+
+            //var max_match = pixel_matches_per_location.MaxElement(x => x.Value);
+            //if (max_match.Value >= MATCHES_THRESHOLD)
+            //    return max_match.Key;
+            //return null;
         }
     }
 
@@ -331,6 +374,7 @@ namespace Farmer
             using var text_detector = new TextDetector();
             var rune_detector = new RuneDetector();
 
+            // Demo 1: picking up runes
             while (true)
             {
                 XY? rune = diablo.DetectRunes(rune_detector);
@@ -339,7 +383,7 @@ namespace Farmer
                     Console.WriteLine("Found rune");
                     diablo.PickUpItem(rune.Value.x, rune.Value.y);
 
-                    Thread.Sleep(2000);
+                    Thread.Sleep(1000);
                 }
                 Thread.Sleep(100);
             }
