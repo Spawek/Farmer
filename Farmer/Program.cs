@@ -12,6 +12,15 @@ using Cv2 = OpenCvSharp.Cv2;
 
 namespace Farmer
 {
+    // Skills must be mapped that way in the game
+    enum Skill
+    {
+        Blink = 1,  // F1
+        Orb = 2,  // F2
+        FrostShield = 3,  // F3
+        EnergyShield = 4,  // F4
+    }
+
     class Diablo
     {
         public Diablo()
@@ -118,6 +127,34 @@ namespace Farmer
             SetCursor(x, y);
         }
 
+        public void SelectSkill(Skill skill)
+        {
+            int skill_no = (int)skill;
+            if (skill_no < 1 || skill_no > 8)
+                throw new ArgumentException($"invalid skill: {skill}");
+            User32.SetForegroundWindow(window_handle);
+            ushort key = (ushort)(User32.VK_F1 + skill_no - 1);
+            User32.PostMessage(window_handle, User32.WM_KEYDOWN, key, 0);
+            Thread.Sleep(5);
+        }
+
+        public void Blink(int x, int y)
+        {
+            SelectSkill(Skill.Blink);
+            RightClick(x, y);
+        }
+
+        public void CastBuffs()
+        {
+            Thread.Sleep(100);
+            SelectSkill(Skill.EnergyShield);
+            RightClick(400, 300);
+            Thread.Sleep(500);
+            SelectSkill(Skill.FrostShield);
+            RightClick(400, 300);
+            Thread.Sleep(500);
+        }
+
         private void MoveWindow(int x, int y)
         {
             User32.GetWindowRect(window_handle, out User32.Rect rect);
@@ -197,6 +234,8 @@ namespace Farmer
             public const ushort WM_SYSCHAR = 0x0106;
             public const ushort VK_ESCAPE = 0x1B;
             public const ushort VK_CONTROL = 0x11;
+            public const ushort VK_F1 = 0x70;
+
             [DllImport("user32.dll")]
             public static extern bool PostMessage(IntPtr hWnd, UInt32 Msg, int wParam, int lParam);
 
@@ -332,20 +371,40 @@ namespace Farmer
             //}
 
             // Demo 2: opening chests
-            while (true)
-            {
-                XY? chest = template_detector.FindChest(diablo.DumpBitmap());
-                if (chest != null)
-                {
-                    Console.WriteLine("Found chest");
-                    diablo.Click(chest.Value.x, chest.Value.y);
+            //while (true)
+            //{
+            //    XY? chest = template_detector.FindChest(diablo.DumpBitmap());
+            //    if (chest != null)
+            //    {
+            //        Console.WriteLine("Found chest");
+            //        diablo.Click(chest.Value.x, chest.Value.y);
 
-                    Thread.Sleep(1500);
+            //        Thread.Sleep(1500);
+            //    }
+            //    Thread.Sleep(100);
+            //}
+
+            // Demo 3: random walk
+            diablo.CastBuffs();
+
+            int min_x = 5;
+            int max_x = 780;
+
+            int min_y = 30;
+            int max_y = 550;
+            var blink_points = new List<XY> { new XY(min_x, min_y), new XY(max_x, min_y), new XY(max_x, max_y), new XY(min_x, max_y) };
+            for (int line = 0; line < 7; line++)
+            {
+                for (int step = 0; step <= line; step++)
+                {
+                    var blink_point = blink_points[line % blink_points.Count];
+                    diablo.Blink(blink_point.x, blink_point.y);
+                    Thread.Sleep(400);
                 }
-                Thread.Sleep(100);
             }
 
-            // TODO: check other template matching methods
+            // TODO: cast buffs
+            // TODO: check other template matching methods (for performance)
 
             // TODO: add turning on map after starting the game
             //Console.WriteLine($"current location: {diablo.DetectMapLocation(text_detector)}");
