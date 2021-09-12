@@ -1,10 +1,14 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
-using System.Windows.Input;
+using OpenCvSharp;
+
+using Cv2 = OpenCvSharp.Cv2;
 
 namespace Farmer
 {
@@ -13,10 +17,12 @@ namespace Farmer
         public Diablo()
         {
             var processes = Process.GetProcessesByName("Game");
+            bool started_game = false;
             if (processes.Length == 0)
             {
                 Process.Start(new ProcessStartInfo(@"F:\gry\Diablo II\Diablo II.exe", "-w"));
-                Thread.Sleep(TimeSpan.FromMilliseconds(500));
+                Thread.Sleep(500);
+                started_game = true;
             }
 
             processes = Process.GetProcessesByName("Game");
@@ -26,17 +32,20 @@ namespace Farmer
             }
             window_handle = processes[0].MainWindowHandle;
 
-            MoveWindow(-1000, 500);
-            Click(400, 300);  // skip enter screen
+            if (started_game)
+            {
+                MoveWindow(-1000, 500);
+                Click(400, 300);  // skip enter screen
+            }
         }
 
         // FROM: https://stackoverflow.com/questions/891345/get-a-screenshot-of-a-specific-application/911225
         // Note: the function is slow (20ms per call), but it's not caused by `new`
         // TODO: try the other foo for fetching images from this stack post (the other doesn't work in the background though)
-        public Bitmap PrintWindow()
+        public Bitmap DumpBitmap()
         {
             User32.GetWindowRect(window_handle, out User32.Rect rect);
-            Bitmap bmp = new Bitmap(rect.right - rect.left, rect.bottom - rect.top, PixelFormat.Format32bppArgb);  
+            Bitmap bmp = new Bitmap(rect.right - rect.left, rect.bottom - rect.top, PixelFormat.Format32bppRgb);
             Graphics gfxBmp = Graphics.FromImage(bmp);
             IntPtr hdcBitmap = gfxBmp.GetHdc();
 
@@ -46,6 +55,12 @@ namespace Farmer
             gfxBmp.Dispose();
 
             return bmp;
+        }
+
+        public string DetectMapLocation(TextDetector detector)
+        {
+            var bmp = DumpBitmap().Clone(new Rectangle(600, 30, 200, 25), PixelFormat.Format32bppRgb);
+            return detector.Detect(bmp);
         }
 
         // https://stackoverflow.com/questions/10355286/programmatically-mouse-click-in-another-window - uses `Cursor` not available on .NET core
@@ -77,8 +92,15 @@ namespace Farmer
         public void Click(int x, int y)
         {
             MoveMouse(x, y);
-            Thread.Sleep(TimeSpan.FromMilliseconds(5));
+            Thread.Sleep(20);
             LeftClick(x, y);
+        }
+
+        // Mouse must be on the object for some time for the click to work.
+        public void PickUpItem(int x, int y)
+        {
+            ShowItems();
+            Click(x, y);
         }
 
         public void RightClick(int x, int y)
@@ -106,7 +128,37 @@ namespace Farmer
             User32.SetForegroundWindow(window_handle);
             User32.PostMessage(window_handle, User32.WM_KEYDOWN, User32.VK_ESCAPE, 0);
             User32.PostMessage(window_handle, User32.WM_KEYUP, User32.VK_ESCAPE, 0);
-            Thread.Sleep(TimeSpan.FromMilliseconds(5));
+            Thread.Sleep(5);
+        }
+
+        // https://docs.microsoft.com/en-us/windows/win32/inputdev/wm-keydown - lparam
+        public void PutCtrlKeyDown()
+        {
+            User32.SetForegroundWindow(window_handle);
+            User32.PostMessage(window_handle, User32.WM_KEYDOWN, User32.VK_CONTROL, 15);
+        }
+
+        public void ShowItems()
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                PutCtrlKeyDown();
+                Thread.Sleep(1);
+            }
+        }
+
+        public void PutCtrlKeyUp()
+        {
+            User32.SetForegroundWindow(window_handle);
+            User32.PostMessage(window_handle, User32.WM_KEYUP, User32.VK_CONTROL, 0);
+        }
+
+        public XY? DetectRunes(RuneDetector rune_detector)
+        {
+            ShowItems();
+            var bmp = DumpBitmap();
+            var rune = rune_detector.FindRune(bmp);
+            return rune;
         }
 
         private class User32
@@ -143,6 +195,7 @@ namespace Farmer
             public const ushort WM_SYSKEYUP = 0x0105;
             public const ushort WM_SYSCHAR = 0x0106;
             public const ushort VK_ESCAPE = 0x1B;
+            public const ushort VK_CONTROL = 0x11;
             [DllImport("user32.dll")]
             public static extern bool PostMessage(IntPtr hWnd, UInt32 Msg, int wParam, int lParam);
 
@@ -155,47 +208,187 @@ namespace Farmer
         private IntPtr window_handle;
     }
 
+    public class TextDetector : IDisposable
+    {
+        public string Detect(Bitmap bmp)
+        {
+            var image = OpenCvSharp.Extensions.BitmapConverter.ToMat(bmp);
+            detector.Run(image,
+                out var outputText, out var componentRects, out var componentTexts, out var componentConfidences, OpenCvSharp.Text.ComponentLevels.Word);
+            string name = $"img_{DateTime.Now.ToLongTimeString()}_{outputText}".Replace(":", "_").Replace("\n", "");
+            bmp.Save($@"C:/tmp/{name}.png");
+            image.SaveImage($@"C:/tmp/{name}.jpg");
+            return outputText;
+        }
+
+        public void Dispose()
+        {
+            detector.Dispose();
+        }
+
+        private OpenCvSharp.Text.OCRTesseract detector = OpenCvSharp.Text.OCRTesseract.Create(@"C:\maciek\programowanie\Farmer\Farmer\TesseractData\");
+    }
+
+    public struct XY
+    {
+        public XY(int x, int y)
+        {
+            this.x = x;
+            this.y = y;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (!(obj is XY))
+                return false;
+            var rhs = (XY)obj;
+
+            return this.x == rhs.x && this.y == rhs.y;
+
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(x, y);
+        }
+
+        public int x;
+        public int y;
+
+        public override string ToString()
+        {
+            return $"({x}, {y})";
+        }
+    }
+
+    public class RuneDetector
+    {
+        public XY? FindRune(Bitmap bmp)
+        {
+            const int KERNEL_SIZE = 5;
+            const int MATCHES_THRESHOLD = 10;
+            var pixel_matches_per_location = new Dictionary<XY, int>();
+
+            Color rune_text_color = Color.FromArgb(208, 132, 32);
+            for (int x = 0; x < bmp.Width; x++)
+            {
+                for (int y = 0; y < bmp.Height; y++)
+                {
+                    if (bmp.GetPixel(x, y) == rune_text_color)
+                    {
+                        int trimmed_x = x - x % KERNEL_SIZE;
+                        int trimmed_y = y - y % KERNEL_SIZE;
+                        XY xy = new XY(trimmed_x, trimmed_y);
+                        if (!pixel_matches_per_location.ContainsKey(xy))
+                            pixel_matches_per_location.Add(xy, 0);
+                        pixel_matches_per_location[xy]++;
+                    }
+                }
+            }
+
+            bmp.Save($@"C:/tmp/runedbg.png");
+
+            //var matches = pixel_matches_per_location
+            //    .Where(x => x.Value >= MATCHES_THRESHOLD)
+            //    .Select(x => x.Key)
+            //    .Select(x => new XY { x = x.x + KERNEL_SIZE / 2, y = x.y + KERNEL_SIZE / 2 })
+            //    .ToList();
+
+            //if (matches.Count > 0)
+            //{
+            //    Bitmap dbg = (Bitmap)bmp.Clone();
+            //    foreach (var match in matches)
+            //    {
+            //        for (int dx = -1; dx <= 1; dx++)
+            //        {
+            //            for (int dy = -1; dy <= 1; dy++)
+            //            {
+            //                dbg.SetPixel(match.x + dx, match.y + dy, Color.Red);
+            //            }
+            //        }
+            //        string name = $"img_{DateTime.Now.ToLongTimeString()}_runes".Replace(":", "_").Replace("\n", "");
+            //        dbg.Save($@"C:/tmp/{name}.png");
+            //    }
+            //}
+
+            if (pixel_matches_per_location.Count == 0)
+                return null;
+
+            var max_match = pixel_matches_per_location.MaxElement(x => x.Value);
+            if (max_match.Value >= MATCHES_THRESHOLD)
+                return max_match.Key;
+            return null;
+        }
+    }
+
     class Program
     {
         static void Main(string[] args)
         {
             var diablo = new Diablo();
 
-            // Menu options:
-            diablo.LeftClick(400, 333);  // Single Player
-            diablo.DoubleLeftClick(200, 150);  // 1st character
-            diablo.LeftClick(400, 305);  // Normal difficulty
-            Thread.Sleep(TimeSpan.FromMilliseconds(1500));
+            //TODO: add location detection foo returning enum
+            using var text_detector = new TextDetector();
+            var rune_detector = new RuneDetector();
 
-            // Pick up dead body
-            diablo.Click(400, 300);
-            Thread.Sleep(TimeSpan.FromMilliseconds(500));
+            while (true)
+            {
+                XY? rune = diablo.DetectRunes(rune_detector);
+                if (rune != null)
+                {
+                    Console.WriteLine("Found rune");
+                    diablo.PickUpItem(rune.Value.x, rune.Value.y);
 
-            // Go from Kurast Docks to Lower Kurast 
-            diablo.Click(750, 350);
-            Thread.Sleep(TimeSpan.FromMilliseconds(1500));
-            diablo.Click(750, 150);
-            Thread.Sleep(TimeSpan.FromMilliseconds(1500));
-            diablo.Click(750, 150);
-            Thread.Sleep(TimeSpan.FromMilliseconds(1500));
-            diablo.Click(750, 150);
-            Thread.Sleep(TimeSpan.FromMilliseconds(1500));
-            diablo.Click(750, 336);
-            Thread.Sleep(TimeSpan.FromMilliseconds(1500));
-            diablo.Click(750, 150);
-            Thread.Sleep(TimeSpan.FromMilliseconds(1500));
-            diablo.Click(750, 150);
-            Thread.Sleep(TimeSpan.FromMilliseconds(1500));
-            diablo.Click(550, 400);
-            Thread.Sleep(TimeSpan.FromMilliseconds(1500));
-            diablo.Click(175, 300);
-            Thread.Sleep(TimeSpan.FromMilliseconds(100));
+                    Thread.Sleep(2000);
+                }
+                Thread.Sleep(100);
+            }
 
-            //Back To main menu
-            diablo.PressEsc();
-            Thread.Sleep(TimeSpan.FromMilliseconds(100));
-            diablo.LeftClick(390, 290);
-            Thread.Sleep(TimeSpan.FromMilliseconds(1000));
+            // TODO: add turning on map after starting the game
+            //Console.WriteLine($"current location: {diablo.DetectMapLocation(text_detector)}");
+
+            //var bmp = diablo.DumpBitmap();
+            //bmp = bmp.Clone(new Rectangle(300, 200, 300, 300), PixelFormat.Format32bppRgb);
+            //var bmp = new Bitmap(@"C:\tmp\img_15_12_35_.png");
+            //var found_runes = rune_detector.FindRunes(bmp);
+            //Console.WriteLine($"Found runes: {found_runes.Count}");
+            //Console.WriteLine($"detected items: {text_detector.Detect(bmp)}"); // TODO: can detect items by just spotting the color of the runes
+
+            //// Menu options:
+            //diablo.LeftClick(400, 333);  // Single Player
+            //diablo.DoubleLeftClick(200, 150);  // 1st character
+            //diablo.LeftClick(400, 305);  // Normal difficulty
+            //Thread.Sleep(1500);
+
+            //// Pick up dead body
+            //diablo.Click(400, 300);
+            //Thread.Sleep(500);
+
+            //// Go from Kurast Docks to Lower Kurast 
+            //diablo.Click(750, 350);
+            //Thread.Sleep(1500);
+            //diablo.Click(750, 150);
+            //Thread.Sleep(1500);
+            //diablo.Click(750, 150);
+            //Thread.Sleep(1500);
+            //diablo.Click(750, 150);
+            //Thread.Sleep(1500);
+            //diablo.Click(750, 336);
+            //Thread.Sleep(1500);
+            //diablo.Click(750, 150);
+            //Thread.Sleep(1500);
+            //diablo.Click(750, 150);
+            //Thread.Sleep(1500);
+            //diablo.Click(550, 400);
+            //Thread.Sleep(1500);
+            //diablo.Click(175, 300);
+            //Thread.Sleep(100);
+
+            ////Back To main menu
+            //diablo.PressEsc();
+            //Thread.Sleep(100);
+            //diablo.LeftClick(390, 290);
+            //Thread.Sleep(1000);
         }
     }
 }
