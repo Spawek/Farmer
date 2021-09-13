@@ -13,6 +13,7 @@ using Cv2 = OpenCvSharp.Cv2;
 namespace Farmer
 {
     // Skills must be mapped that way in the game
+    // Keep Orb on left mouse button
     enum Skill
     {
         Blink = 1,  // F1
@@ -208,11 +209,11 @@ namespace Farmer
             User32.PostMessage(window_handle, User32.WM_KEYUP, User32.VK_CONTROL, 0);
         }
 
-        public XY? DetectRunes(TemplateDetector rune_detector)
+        public XY? DetectItemsWorthPicking(TemplateDetector rune_detector)
         {
             ShowItems();
             var bmp = DumpBitmap();
-            var rune = rune_detector.FindRune(bmp);
+            var rune = rune_detector.FindItemWorthPicking(bmp);
             return rune;
         }
 
@@ -320,9 +321,12 @@ namespace Farmer
 
     public class TemplateDetector
     {
-        public XY? FindRune(Bitmap bmp)
+        public XY? FindItemWorthPicking(Bitmap bmp)
         {
-            return FindTemplate(bmp, rune_template, 0.9);
+            return FindTemplate(bmp, rune_template, 0.9) ??
+                   FindTemplate(bmp, small_charm_template, 0.9) ??
+                   FindTemplate(bmp, gold_ring_template, 0.9) ??
+                   FindTemplate(bmp, gold_amulet_template, 0.9);
         }
 
         public XY? FindChest(Bitmap bmp)
@@ -341,15 +345,9 @@ namespace Farmer
 
         public XY? FindOrmus(Bitmap bmp)
         {
-            var ret = FindTemplate(bmp, ormus1_template, 0.6);
-            if (ret != null)
-                return ret;
-
-            ret = FindTemplate(bmp, ormus2_template, 0.6);
-            if (ret != null)
-                return ret;
-
-            return FindTemplate(bmp, ormus3_template, 0.6);
+            return FindTemplate(bmp, ormus1_template, 0.6) ??
+                   FindTemplate(bmp, ormus2_template, 0.6) ??
+                   FindTemplate(bmp, ormus3_template, 0.6);
         }
 
         public XY? FindWaypoint(Bitmap bmp)
@@ -385,6 +383,9 @@ namespace Farmer
         }
 
         private Mat rune_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\rune.png");
+        private Mat small_charm_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\small_charm.png");
+        private Mat gold_ring_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\gold_ring.png");
+        private Mat gold_amulet_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\gold_amulet.png");
         private Mat chest_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\chest.png");
         private Mat chest2_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\chest2.png");
         private Mat dead_body_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\dead_body.png");
@@ -414,7 +415,7 @@ namespace Farmer
         }
 
         private const int min_x = 100;
-        private const int max_x = 680;
+        private const int max_x = 730;
         private const int min_y = 130;
         private const int max_y = 450;
         private List<XY> blink_points = new List<XY> { new XY(min_x, min_y), new XY(max_x, min_y), new XY(max_x, max_y), new XY(min_x, max_y) };
@@ -423,17 +424,17 @@ namespace Farmer
     class Program
     {
 
-        static void Scenario1_PickUpRunes()
+        static void Scenario1_PickUpItems()
         {
             var diablo = new Diablo();
             var template_detector = new TemplateDetector();
 
             while (true)
             {
-                XY? rune = diablo.DetectRunes(template_detector);
+                XY? rune = diablo.DetectItemsWorthPicking(template_detector);
                 if (rune != null)
                 {
-                    Console.WriteLine("Found rune");
+                    Console.WriteLine("!!!!!!!!!!!!! Found item");
                     diablo.PickUpItem(rune.Value.x, rune.Value.y);
 
                     Thread.Sleep(1500);
@@ -463,6 +464,7 @@ namespace Farmer
 
         // REMEMBER TO BUY KEYS!
         // REMEMBER TO RUN VS AS ADMINISTRATOR SO IT CAN KILL DIABLO.
+        // REMEMBER TO HIDE CONSOLE (AS CLICKING AT IT PAUSES THE GAME)
         static void Scenario3_FarmLowerKurast(bool forever)
         {
             int runs = 0;
@@ -482,7 +484,7 @@ namespace Farmer
 
                     var diablo = new Diablo();
 
-                    //diablo.DumpBitmap().Save(@"C:/tmp/tmp.png");
+                    diablo.DumpBitmap().Save(@"C:/tmp/tmp.png");
                     Thread.Sleep(300);
                     diablo.LeftClick(400, 333);  // Single Player
                     diablo.DoubleLeftClick(200, 150);  // 1st character
@@ -545,7 +547,7 @@ namespace Farmer
                     diablo.Click(175, 300);
                     Thread.Sleep(100);
 
-                    for (int i = 0; i < 50; i++)
+                    for (int i = 0; i < 70; i++)
                     {
                         var blink_point = random_walk.Next();
                         diablo.Blink(blink_point.x, blink_point.y);
@@ -565,11 +567,11 @@ namespace Farmer
 
                             for (int rune_try = 0; rune_try < 3; rune_try++)  // rune picking fails sometimes
                             {
-                                XY? rune = diablo.DetectRunes(template_detector);
+                                XY? rune = diablo.DetectItemsWorthPicking(template_detector);
                                 if (rune == null)
                                     break;
 
-                                Console.WriteLine("---> Found rune");
+                                Console.WriteLine("!!!!!!!!!!!!! Found item");
                                 runes_found++;
                                 diablo.PickUpItem(rune.Value.x, rune.Value.y);
 
@@ -607,13 +609,19 @@ namespace Farmer
             // BUG: bot clicked in the console somehow which paused the run
             // Bot picked few random items
             // most of keys are gone
+            // TODO: screen was asleep in the morning - it couldve been the reason the bot stopped
+            // TODO: use telekinesis to pick up items/open chests?
+
+            // TODO: make move window work on single screen
+            // TODO: fixing items + buying keys?
+            // TODO: throwing away shitty runes
         }
 
         static void Main(string[] args)
         {
-            //Scenario1_PickUpRunes();
+            Scenario1_PickUpItems();
             //Scenario2_OpenChests();
-            Scenario3_FarmLowerKurast(true); // forver
+            //Scenario3_FarmLowerKurast(true); // forver
             //Scenario3_FarmLowerKurast(false); // once
         }
     }
