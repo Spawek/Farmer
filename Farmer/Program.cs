@@ -48,11 +48,21 @@ namespace Farmer
             }
         }
 
+        public void Kill()
+        {
+            var processes = Process.GetProcessesByName("Game");
+            foreach (var p in processes)
+            {
+                p.Kill(true);
+            }
+        }
+
         // FROM: https://stackoverflow.com/questions/891345/get-a-screenshot-of-a-specific-application/911225
         // Note: the function is slow (20ms per call), but it's not caused by `new`
         // TODO: try the other foo for fetching images from this stack post (the other doesn't work in the background though)
         public Bitmap DumpBitmap()
         {
+            User32.SetForegroundWindow(window_handle);
             User32.GetWindowRect(window_handle, out User32.Rect rect);
             Bitmap bmp = new Bitmap(rect.right - rect.left, rect.bottom - rect.top, PixelFormat.Format32bppRgb);
             Graphics gfxBmp = Graphics.FromImage(bmp);
@@ -76,6 +86,7 @@ namespace Farmer
         // FROM: https://www.codeproject.com/Articles/32556/Auto-Clicker-C
         private void SetCursor(int x, int y)
         {
+            User32.SetForegroundWindow(window_handle);
             User32.GetWindowRect(window_handle, out User32.Rect rect);
             User32.SetCursorPos(x + rect.left, y + rect.top);
         }
@@ -157,6 +168,7 @@ namespace Farmer
 
         private void MoveWindow(int x, int y)
         {
+            User32.SetForegroundWindow(window_handle);
             User32.GetWindowRect(window_handle, out User32.Rect rect);
             User32.MoveWindow(window_handle, x, y, rect.right - rect.left, rect.bottom - rect.top, false);
         }
@@ -345,6 +357,11 @@ namespace Farmer
             return FindTemplate(bmp, waypoint_template, 0.8);
         }
 
+        public XY? FindKurastSpawnpoint(Bitmap bmp)
+        {
+            return FindTemplate(bmp, kurast_spawnpoint, 0.8);
+        }
+
         private static Mat LoadBitmap(string path)
         {
             var bmp = new Bitmap(path);
@@ -375,6 +392,7 @@ namespace Farmer
         private Mat ormus2_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\ormus2.png");
         private Mat ormus3_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\ormus3.png");
         private Mat waypoint_template = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\waypoint.png");
+        private Mat kurast_spawnpoint = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\kurast_spawnpoint.png");
     }
 
     public  class RandomWalk
@@ -444,114 +462,151 @@ namespace Farmer
         }
 
         // REMEMBER TO BUY KEYS!
+        // REMEMBER TO RUN VS AS ADMINISTRATOR SO IT CAN KILL DIABLO.
         static void Scenario3_FarmLowerKurast(bool forever)
         {
-            var diablo = new Diablo();
-            using var text_detector = new TextDetector();
-            var template_detector = new TemplateDetector();
-            var random_walk = new RandomWalk();
-
-            diablo.DumpBitmap().Save(@"C:/tmp/tmp.png");
-
+            int runs = 0;
+            int runes_found = 0;
+            int chests_found = 0;
+            DateTime start_time = DateTime.Now;
             do
             {
-                diablo.LeftClick(400, 333);  // Single Player
-                diablo.DoubleLeftClick(200, 150);  // 1st character
-                                                   //diablo.LeftClick(400, 305);  // Normal difficulty
-                diablo.LeftClick(400, 390);  // Hell difficulty
-                Thread.Sleep(1500);
-
-                // TODO: add using orb
-                if (template_detector.FindDeadBody(diablo.DumpBitmap()) != null)
+                using var text_detector = new TextDetector();
+                var template_detector = new TemplateDetector();
+                try
                 {
-                    diablo.Click(400, 300);
-                    Thread.Sleep(500);
-                }
+                LOOP_START:
+                    var random_walk = new RandomWalk();  // NOTE: this is statefull (initialize once per run)
 
-                diablo.CastBuffs();
+                    Console.WriteLine($"Stats: runs:{++runs}, runes found: {runes_found}, chests found: {chests_found}, time elapsed: {DateTime.Now - start_time}");
 
-                // Go from Kurast Docks to Lower Kurast 
-                diablo.Click(750, 350);
-                Thread.Sleep(1500);
-                diablo.Click(750, 150);
-                Thread.Sleep(1500);
-                diablo.Click(750, 150);
-                Thread.Sleep(1500);
-                diablo.Click(750, 150);
-                Thread.Sleep(1500);
-                var ormus_pos = template_detector.FindOrmus(diablo.DumpBitmap());
-                if (ormus_pos != null)
-                {
-                    diablo.Click(ormus_pos.Value.x, ormus_pos.Value.y);
+                    var diablo = new Diablo();
+
+                    //diablo.DumpBitmap().Save(@"C:/tmp/tmp.png");
+                    Thread.Sleep(300);
+                    diablo.LeftClick(400, 333);  // Single Player
+                    diablo.DoubleLeftClick(200, 150);  // 1st character
+                                                       //diablo.LeftClick(400, 305);  // Normal difficulty
+                    diablo.LeftClick(400, 390);  // Hell difficulty
                     Thread.Sleep(1500);
-                }
-                else
-                {
-                    Console.WriteLine("Coulnd't find Ormus");
-                }
-                diablo.Click(750, 550);
-                Thread.Sleep(1500);
-                diablo.Click(750, 30);
-                Thread.Sleep(1500);
-                diablo.Click(750, 350);
-                Thread.Sleep(1500);
-                var waypoint_pos = template_detector.FindWaypoint(diablo.DumpBitmap());
-                if (waypoint_pos != null)
-                {
-                    diablo.Click(waypoint_pos.Value.x, waypoint_pos.Value.y);
-                    Thread.Sleep(1500);
-                }
-                else
-                {
-                    Console.WriteLine("Coulnd't find Waypoint");
-                    goto END_RUN;
-                }
-                diablo.Click(175, 300);
-                Thread.Sleep(100);
 
-                for (int i = 0; i < 50; i++)
-                {
-                    var blink_point = random_walk.Next();
-                    diablo.Blink(blink_point.x, blink_point.y);
-                    Thread.Sleep(400);
-
-                    for (int chest_try = 0; chest_try < 2; chest_try++)  // there may be 2 chests next to each other
+                    if (template_detector.FindKurastSpawnpoint(diablo.DumpBitmap()) == null)
                     {
-                        XY? chest = template_detector.FindChest(diablo.DumpBitmap());
-                        if (chest == null)
-                            break;
+                        Console.WriteLine("Doesn't look like Kurast spawnpoint: restarting the game");
+                        diablo.Kill();
+                        goto LOOP_START;
+                    }
 
-                        Console.WriteLine("Found chest");
-                        diablo.Click(chest.Value.x, chest.Value.y);
+                    // TODO: add using orb
+                    if (template_detector.FindDeadBody(diablo.DumpBitmap()) != null)
+                    {
+                        diablo.Click(400, 300);
+                        Thread.Sleep(500);
+                    }
 
+                    diablo.CastBuffs();
+
+                    // Go from Kurast Docks to Lower Kurast 
+                    diablo.Click(750, 350);
+                    Thread.Sleep(1500);
+                    diablo.Click(750, 150);
+                    Thread.Sleep(1500);
+                    diablo.Click(750, 150);
+                    Thread.Sleep(1500);
+                    diablo.Click(750, 150);
+                    Thread.Sleep(1500);
+                    var ormus_pos = template_detector.FindOrmus(diablo.DumpBitmap());
+                    if (ormus_pos != null)
+                    {
+                        diablo.Click(ormus_pos.Value.x, ormus_pos.Value.y);
                         Thread.Sleep(1500);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Coulnd't find Ormus");
+                    }
+                    diablo.Click(750, 550);
+                    Thread.Sleep(1500);
+                    diablo.Click(750, 30);
+                    Thread.Sleep(1500);
+                    diablo.Click(750, 350);
+                    Thread.Sleep(1500);
+                    var waypoint_pos = template_detector.FindWaypoint(diablo.DumpBitmap());
+                    if (waypoint_pos != null)
+                    {
+                        diablo.Click(waypoint_pos.Value.x, waypoint_pos.Value.y);
+                        Thread.Sleep(1500);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Coulnd't find Waypoint");
+                        goto END_RUN;
+                    }
+                    diablo.Click(175, 300);
+                    Thread.Sleep(100);
 
-                        for (int rune_try = 0; rune_try < 3; rune_try++)  // rune picking fails sometimes
+                    for (int i = 0; i < 50; i++)
+                    {
+                        var blink_point = random_walk.Next();
+                        diablo.Blink(blink_point.x, blink_point.y);
+                        Thread.Sleep(400);
+
+                        for (int chest_try = 0; chest_try < 2; chest_try++)  // there may be 2 chests next to each other
                         {
-                            XY? rune = diablo.DetectRunes(template_detector);
-                            if (rune == null)
+                            XY? chest = template_detector.FindChest(diablo.DumpBitmap());
+                            if (chest == null)
                                 break;
 
-                            Console.WriteLine("Found rune");
-                            diablo.PickUpItem(rune.Value.x, rune.Value.y);
+                            Console.WriteLine("Found chest");
+                            chests_found++;
+                            diablo.Click(chest.Value.x, chest.Value.y);
 
                             Thread.Sleep(1500);
+
+                            for (int rune_try = 0; rune_try < 3; rune_try++)  // rune picking fails sometimes
+                            {
+                                XY? rune = diablo.DetectRunes(template_detector);
+                                if (rune == null)
+                                    break;
+
+                                Console.WriteLine("---> Found rune");
+                                runes_found++;
+                                diablo.PickUpItem(rune.Value.x, rune.Value.y);
+
+                                Thread.Sleep(1500);
+                            }
                         }
                     }
-                }
 
                 END_RUN:
-                Console.WriteLine("Ending the run");
-                Thread.Sleep(400);
-                diablo.PressEsc();
-                Thread.Sleep(100);
-                diablo.LeftClick(390, 290);
-                Thread.Sleep(1000);
+                    Console.WriteLine($"Ending the run");
+                    Thread.Sleep(400);
+                    diablo.PressEsc();
+                    Thread.Sleep(100);
+                    diablo.LeftClick(390, 290);
+                    Thread.Sleep(1000);
+
+                    if ((runs % 10) == 0)
+                    {
+                        Thread.Sleep(5000);
+                        Console.WriteLine("Killing the process after 10 runs");
+                        diablo.Kill();
+                    }
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"Uncaught exception: {e}");
+                }
             }
             while (forever);
 
             // TODO: restart diablo every 10 runs?
             // TODO: check if it's in main menu when starting
+
+            // 1st night: 4 runes / hour, then clicked in console and paused
+            // BUG: bot clicked in the console somehow which paused the run
+            // Bot picked few random items
+            // most of keys are gone
         }
 
         static void Main(string[] args)
