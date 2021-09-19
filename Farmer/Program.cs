@@ -9,6 +9,13 @@ using System.Threading;
 using OpenCvSharp;
 using NumSharp;
 using Cv2 = OpenCvSharp.Cv2;
+using System.Windows.Interop;
+
+namespace System.Windows.Input
+{
+    using ModifierKey = System.UInt16;
+    using Key = System.UInt16;
+}
 
 namespace Farmer
 {
@@ -153,6 +160,12 @@ namespace Farmer
         public void Blink(int x, int y)
         {
             SelectSkill(Skill.Blink);
+            RightClick(x, y);
+        }
+
+        public void CastOrb(int x, int y)
+        {
+            SelectSkill(Skill.Orb);
             RightClick(x, y);
         }
 
@@ -462,14 +475,18 @@ namespace Farmer
             }
         }
 
+        [DllImport("kernel32.dll")]
+        public static extern uint GetLastError();
+
         // REMEMBER TO BUY KEYS!
         // REMEMBER TO RUN VS AS ADMINISTRATOR SO IT CAN KILL DIABLO.
         // REMEMBER TO HIDE CONSOLE (AS CLICKING AT IT PAUSES THE GAME)
         static void Scenario3_FarmLowerKurast(bool forever)
         {
             int runs = 0;
-            int runes_found = 0;
+            int items_found = 0;
             int chests_found = 0;
+
             DateTime start_time = DateTime.Now;
             do
             {
@@ -480,7 +497,7 @@ namespace Farmer
                 LOOP_START:
                     var random_walk = new RandomWalk();  // NOTE: this is statefull (initialize once per run)
 
-                    Console.WriteLine($"Stats: runs:{++runs}, runes found: {runes_found}, chests found: {chests_found}, time elapsed: {DateTime.Now - start_time}");
+                    Console.WriteLine($"Stats: runs:{++runs}, items found: {items_found}, chests found: {chests_found}, time elapsed: {DateTime.Now - start_time}");
 
                     var diablo = new Diablo();
 
@@ -499,7 +516,6 @@ namespace Farmer
                         goto LOOP_START;
                     }
 
-                    // TODO: add using orb
                     if (template_detector.FindDeadBody(diablo.DumpBitmap()) != null)
                     {
                         diablo.Click(400, 300);
@@ -552,6 +568,12 @@ namespace Farmer
                         var blink_point = random_walk.Next();
                         diablo.Blink(blink_point.x, blink_point.y);
                         Thread.Sleep(400);
+                        
+                        //if ((i%3) == 0)
+                        //{
+                        //    diablo.CastOrb(blink_point.x, blink_point.y);
+                        //    Thread.Sleep(600);
+                        //}
 
                         for (int chest_try = 0; chest_try < 2; chest_try++)  // there may be 2 chests next to each other
                         {
@@ -565,15 +587,15 @@ namespace Farmer
 
                             Thread.Sleep(1500);
 
-                            for (int rune_try = 0; rune_try < 3; rune_try++)  // rune picking fails sometimes
+                            for (int item_try = 0; item_try < 3; item_try++)  // rune picking fails sometimes
                             {
-                                XY? rune = diablo.DetectItemsWorthPicking(template_detector);
-                                if (rune == null)
+                                XY? item = diablo.DetectItemsWorthPicking(template_detector);
+                                if (item == null)
                                     break;
 
                                 Console.WriteLine("!!!!!!!!!!!!! Found item");
-                                runes_found++;
-                                diablo.PickUpItem(rune.Value.x, rune.Value.y);
+                                items_found++;
+                                diablo.PickUpItem(item.Value.x, item.Value.y);
 
                                 Thread.Sleep(1500);
                             }
@@ -610,18 +632,24 @@ namespace Farmer
             // Bot picked few random items
             // most of keys are gone
             // TODO: screen was asleep in the morning - it couldve been the reason the bot stopped
-            // TODO: use telekinesis to pick up items/open chests?
 
             // TODO: make move window work on single screen
             // TODO: fixing items + buying keys?
             // TODO: throwing away shitty runes
+            // TODO: add pause/unpause bot by clicking some button
         }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool AllocConsole();
 
         static void Main(string[] args)
         {
-            Scenario1_PickUpItems();
+            AllocConsole();
+
+            //Scenario1_PickUpItems();
             //Scenario2_OpenChests();
-            //Scenario3_FarmLowerKurast(true); // forver
+            Scenario3_FarmLowerKurast(true); // forver
             //Scenario3_FarmLowerKurast(false); // once
         }
     }
