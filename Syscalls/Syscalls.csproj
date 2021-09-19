@@ -2,6 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>netcoreapp3.1</TargetFramework>
+    <OutputType>Library</OutputType>
+    <UseWPF>true</UseWPF>
   </PropertyGroup>
 
 </Project>

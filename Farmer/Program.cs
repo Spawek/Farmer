@@ -8,8 +8,9 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using OpenCvSharp;
 using NumSharp;
-using Cv2 = OpenCvSharp.Cv2;
 using System.Windows.Interop;
+using Cv2 = OpenCvSharp.Cv2;
+using SysCalls;
 
 namespace System.Windows.Input
 {
@@ -70,13 +71,13 @@ namespace Farmer
         // TODO: try the other foo for fetching images from this stack post (the other doesn't work in the background though)
         public Bitmap DumpBitmap()
         {
-            User32.SetForegroundWindow(window_handle);
-            User32.GetWindowRect(window_handle, out User32.Rect rect);
+            Syscall.SetForegroundWindow(window_handle);
+            Syscall.GetWindowRect(window_handle, out SysCalls.Syscall.Rect rect);
             Bitmap bmp = new Bitmap(rect.right - rect.left, rect.bottom - rect.top, PixelFormat.Format32bppRgb);
             Graphics gfxBmp = Graphics.FromImage(bmp);
             IntPtr hdcBitmap = gfxBmp.GetHdc();
 
-            User32.PrintWindow(window_handle, hdcBitmap, 0);
+            Syscall.PrintWindow(window_handle, hdcBitmap, 0);
 
             gfxBmp.ReleaseHdc(hdcBitmap);
             gfxBmp.Dispose();
@@ -94,9 +95,9 @@ namespace Farmer
         // FROM: https://www.codeproject.com/Articles/32556/Auto-Clicker-C
         private void SetCursor(int x, int y)
         {
-            User32.SetForegroundWindow(window_handle);
-            User32.GetWindowRect(window_handle, out User32.Rect rect);
-            User32.SetCursorPos(x + rect.left, y + rect.top);
+            Syscall.SetForegroundWindow(window_handle);
+            Syscall.GetWindowRect(window_handle, out SysCalls.Syscall.Rect rect);
+            Syscall.SetCursorPos(x + rect.left, y + rect.top);
         }
 
         private const int MOUSEEVENTF_LEFTDOWN = 0x0002;
@@ -105,10 +106,10 @@ namespace Farmer
         private const int MOUSEEVENTF_RIGHTUP = 0x0010;
         public void LeftClick(int x, int y)
         {
-            User32.SetForegroundWindow(window_handle);
+            Syscall.SetForegroundWindow(window_handle);
             SetCursor(x, y);
-            User32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
-            User32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
+            Syscall.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+            Syscall.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
         }
         public void DoubleLeftClick(int x, int y)
         {
@@ -134,15 +135,15 @@ namespace Farmer
 
         public void RightClick(int x, int y)
         {
-            User32.SetForegroundWindow(window_handle);
+            Syscall.SetForegroundWindow(window_handle);
             SetCursor(x, y);
-            User32.mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0);
-            User32.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0);
+            Syscall.mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0);
+            Syscall.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0);
         }
 
         public void MoveMouse(int x, int y)
         {
-            User32.SetForegroundWindow(window_handle);
+            Syscall.SetForegroundWindow(window_handle);
             SetCursor(x, y);
         }
 
@@ -151,9 +152,9 @@ namespace Farmer
             int skill_no = (int)skill;
             if (skill_no < 1 || skill_no > 8)
                 throw new ArgumentException($"invalid skill: {skill}");
-            User32.SetForegroundWindow(window_handle);
-            ushort key = (ushort)(User32.VK_F1 + skill_no - 1);
-            User32.PostMessage(window_handle, User32.WM_KEYDOWN, key, 0);
+            Syscall.SetForegroundWindow(window_handle);
+            ushort key = (ushort)(Syscall.VK_F1 + skill_no - 1);
+            Syscall.PostMessage(window_handle, Syscall.WM_KEYDOWN, key, 0);
             Thread.Sleep(5);
         }
 
@@ -182,29 +183,29 @@ namespace Farmer
 
         private void MoveWindow(int x, int y)
         {
-            User32.SetForegroundWindow(window_handle);
-            User32.GetWindowRect(window_handle, out User32.Rect rect);
-            User32.MoveWindow(window_handle, x, y, rect.right - rect.left, rect.bottom - rect.top, false);
+            Syscall.SetForegroundWindow(window_handle);
+            Syscall.GetWindowRect(window_handle, out Syscall.Rect rect);
+            Syscall.MoveWindow(window_handle, x, y, rect.right - rect.left, rect.bottom - rect.top, false);
         }
 
         public void PressEsc()
         {
-            User32.SetForegroundWindow(window_handle);
-            
+            Syscall.SetForegroundWindow(window_handle);
+
             // there seems to be some interference
             Thread.Sleep(5);
-            User32.PostMessage(window_handle, User32.WM_KEYUP, User32.VK_CONTROL, 15);
+            Syscall.PostMessage(window_handle, Syscall.WM_KEYUP, Syscall.VK_CONTROL, 15);
             Thread.Sleep(5);
 
-            User32.PostMessage(window_handle, User32.WM_KEYDOWN, User32.VK_ESCAPE, 0);
+            Syscall.PostMessage(window_handle, Syscall.WM_KEYDOWN, Syscall.VK_ESCAPE, 0);
             Thread.Sleep(5);
         }
 
         // https://docs.microsoft.com/en-us/windows/win32/inputdev/wm-keydown - lparam
         public void PutCtrlKeyDown()
         {
-            User32.SetForegroundWindow(window_handle);
-            User32.PostMessage(window_handle, User32.WM_KEYDOWN, User32.VK_CONTROL, 15);
+            Syscall.SetForegroundWindow(window_handle);
+            Syscall.PostMessage(window_handle, Syscall.WM_KEYDOWN, Syscall.VK_CONTROL, 15);
         }
 
         public void ShowItems()
@@ -218,8 +219,8 @@ namespace Farmer
 
         public void PutCtrlKeyUp()
         {
-            User32.SetForegroundWindow(window_handle);
-            User32.PostMessage(window_handle, User32.WM_KEYUP, User32.VK_CONTROL, 0);
+            Syscall.SetForegroundWindow(window_handle);
+            Syscall.PostMessage(window_handle, Syscall.WM_KEYUP, Syscall.VK_CONTROL, 0);
         }
 
         public XY? DetectItemsWorthPicking(TemplateDetector rune_detector)
@@ -228,52 +229,6 @@ namespace Farmer
             var bmp = DumpBitmap();
             var rune = rune_detector.FindItemWorthPicking(bmp);
             return rune;
-        }
-
-        private class User32
-        {
-            [StructLayout(LayoutKind.Sequential)]
-            public struct Rect
-            {
-                public int left;
-                public int top;
-                public int right;
-                public int bottom;
-            }
-
-            [DllImport("user32.dll")]
-            public static extern bool GetWindowRect(IntPtr hWnd, out Rect lpRect);
-
-            [DllImport("user32.dll")]
-            public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, int nFlags);
-
-            [DllImport("user32.dll")]
-            public static extern int SetCursorPos(int x, int y);
-
-            [DllImport("user32.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall)]
-            public static extern void mouse_event(int dwFlags, int dx, int dy, int cButtons, int dwExtraInfo);
-
-            [DllImport("user32.dll")]
-            public static extern bool SetForegroundWindow(IntPtr hWnd);
-
-            // FROM: https://docs.microsoft.com/en-us/windows/win32/learnwin32/keyboard-input
-            // Codes: https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
-            public const ushort WM_KEYDOWN = 0x0100;
-            public const ushort WM_KEYUP = 0x0101;
-            public const ushort WM_SYSKEYDOWN = 0x0104;
-            public const ushort WM_SYSKEYUP = 0x0105;
-            public const ushort WM_SYSCHAR = 0x0106;
-            public const ushort VK_ESCAPE = 0x1B;
-            public const ushort VK_CONTROL = 0x11;
-            public const ushort VK_F1 = 0x70;
-
-            [DllImport("user32.dll")]
-            public static extern bool PostMessage(IntPtr hWnd, UInt32 Msg, int wParam, int lParam);
-
-            // MoveWindow moves a window or changes its size based on a window handle.
-            [DllImport("user32.dll", SetLastError = true)]
-            public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
-
         }
 
         private IntPtr window_handle;
@@ -384,7 +339,7 @@ namespace Farmer
         {
             var image = OpenCvSharp.Extensions.BitmapConverter.ToMat(bmp);
             var result = new Mat();
-            
+
             Cv2.MatchTemplate(image, template, result, TemplateMatchModes.CCoeffNormed);
 
             var min_index = new int[2];
@@ -409,7 +364,7 @@ namespace Farmer
         private Mat kurast_spawnpoint = LoadBitmap(@"C:\maciek\programowanie\Farmer\templates\kurast_spawnpoint.png");
     }
 
-    public  class RandomWalk
+    public class RandomWalk
     {
         private int line = 0;
         private int step = 0;
@@ -568,7 +523,7 @@ namespace Farmer
                         var blink_point = random_walk.Next();
                         diablo.Blink(blink_point.x, blink_point.y);
                         Thread.Sleep(400);
-                        
+
                         //if ((i%3) == 0)
                         //{
                         //    diablo.CastOrb(blink_point.x, blink_point.y);

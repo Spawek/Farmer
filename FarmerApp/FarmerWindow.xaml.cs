@@ -1,5 +1,4 @@
-﻿using mrousavy;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -16,6 +15,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using SysCalls;
 
 namespace FarmerApp
 {
@@ -24,34 +24,18 @@ namespace FarmerApp
     /// </summary>
     public partial class FarmerWindow : Window
     {
-        [DllImport("kernel32.dll")]
-        public static extern uint GetLastError();
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        static extern bool AllocConsole();
-
         public FarmerWindow()
         {
-            AllocConsole();
+            Syscall.AllocConsole();
 
             InitializeComponent();
         }
 
-        [DllImport("User32.dll")]
-        private static extern bool RegisterHotKey(
-            [In] IntPtr hWnd,
-            [In] int id,
-            [In] uint fsModifiers,
-            [In] uint vk);
-
-        [DllImport("User32.dll")]
-        private static extern bool UnregisterHotKey(
-            [In] IntPtr hWnd,
-            [In] int id);
-
+        // Register global hotkey code from:
+        // https://gist.github.com/rincew1nd/8a106f4c3e54ef694e934bb4ff737512
         private HwndSource _source;
-        private const int HOTKEY_ID = 9000;
+        private const int PAUSE_HOTKEY_ID = 9000;
+        private const int UNPAUSE_HOTKEY_ID = 9001;
 
         protected override void OnSourceInitialized(EventArgs e)
         {
@@ -59,7 +43,7 @@ namespace FarmerApp
             var helper = new WindowInteropHelper(this);
             _source = HwndSource.FromHwnd(helper.Handle);
             _source.AddHook(HwndHook);
-            RegisterHotKey();
+            RegisterHotKeys();
         }
 
         protected override void OnClosed(EventArgs e)
@@ -70,23 +54,32 @@ namespace FarmerApp
             base.OnClosed(e);
         }
 
-        private void RegisterHotKey()
+        private void RegisterHotKeys()
+        {
+            RegisterHotkey(PAUSE_HOTKEY_ID, Syscall.Key(Key.F10), (uint)ModifierKeys.Control);
+            RegisterHotkey(UNPAUSE_HOTKEY_ID, Syscall.Key(Key.F11), (uint)ModifierKeys.Control);
+        }
+
+        private void RegisterHotkey(int id, uint key, uint mod)
         {
             var helper = new WindowInteropHelper(this);
-            const uint VK_F10 = 0x79;
-            const uint MOD_CTRL = 0x0002;
-            if (!RegisterHotKey(helper.Handle, HOTKEY_ID, MOD_CTRL, VK_F10))
+            Console.Write($"Hotkey registration: ID {id}, key: {key}, mod: {mod}: ");
+            if (!Syscall.RegisterHotKey(helper.Handle, id, mod, key))
             {
-                uint err = GetLastError();
+                uint err = Syscall.GetLastError();
                 // https://docs.microsoft.com/en-us/windows/win32/debug/system-error-codes--1300-1699-
-                Console.WriteLine($"Hotkey registration failed: {err}");
+                Console.WriteLine($"failed: {err}");
+            }
+            else
+            {
+                Console.WriteLine($"succeded!");
             }
         }
 
         private void UnregisterHotKey()
         {
             var helper = new WindowInteropHelper(this);
-            UnregisterHotKey(helper.Handle, HOTKEY_ID);
+            Syscall.UnregisterHotKey(helper.Handle, PAUSE_HOTKEY_ID);
         }
 
         private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -97,8 +90,13 @@ namespace FarmerApp
                 case WM_HOTKEY:
                     switch (wParam.ToInt32())
                     {
-                        case HOTKEY_ID:
-                            OnHotKeyPressed();
+                        case PAUSE_HOTKEY_ID:
+                            PauseKeyPressed();
+                            handled = true;
+                            break;
+
+                        case UNPAUSE_HOTKEY_ID:
+                            UnpauseKeyPressed();
                             handled = true;
                             break;
                     }
@@ -107,10 +105,14 @@ namespace FarmerApp
             return IntPtr.Zero;
         }
 
-        private void OnHotKeyPressed()
+        private void PauseKeyPressed()
         {
-            Console.WriteLine("test");
-            // do stuff
+            Console.WriteLine("Pause key pressed");
+        }
+
+        private void UnpauseKeyPressed()
+        {
+            Console.WriteLine("Unpause key pressed");
         }
     }
 }
