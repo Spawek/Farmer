@@ -7,6 +7,7 @@
         mc:Ignorable="d"
         Title="Farmer" Height="450" Width="800">
     <Grid>
-
+        <TextBlock HorizontalAlignment="Left" Margin="573,0,0,0" Text="State:" TextWrapping="Wrap" VerticalAlignment="Center"/>
+        <TextBlock Name="State" HorizontalAlignment="Left" Margin="619,0,0,0" Text="Running" TextWrapping="Wrap" VerticalAlignment="Center"/>
     </Grid>
 </Window>

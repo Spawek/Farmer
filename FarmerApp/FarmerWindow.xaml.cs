@@ -26,9 +26,15 @@ namespace FarmerApp
     {
         public FarmerWindow()
         {
-            Syscall.AllocConsole();
+            this.Left = -1500;
+            this.Top = 800;
 
             InitializeComponent();
+        }
+
+        protected override void OnInitialized(EventArgs e)
+        {
+            base.OnInitialized(e);
         }
 
         // Register global hotkey code from:
@@ -40,6 +46,7 @@ namespace FarmerApp
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
+
             var helper = new WindowInteropHelper(this);
             _source = HwndSource.FromHwnd(helper.Handle);
             _source.AddHook(HwndHook);
@@ -107,12 +114,14 @@ namespace FarmerApp
 
         private void PauseKeyPressed()
         {
-            Console.WriteLine("Pause key pressed");
+            Console.WriteLine("Pausing bot");
+            App.scenario.Pause();
         }
 
         private void UnpauseKeyPressed()
         {
-            Console.WriteLine("Unpause key pressed");
+            Console.WriteLine("Unpausing bot");
+            App.scenario.Unpause();
         }
     }
 }
